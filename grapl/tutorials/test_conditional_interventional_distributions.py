@@ -3,7 +3,7 @@ import grapl.dsl as dsl
 import grapl.expr as expr
 import grapl.util as util
 import dsep
-
+import copy as cp
 #
 # # Creating an example graph.
 # grapl_obj = dsl.GraplDSL()
@@ -63,8 +63,9 @@ grapl_obj = dsl.GraplDSL()
 #     Z -> W; '
 
 dag_grapl = ' "conditional interventional distribution complicated"; \
-    X; Z; Y; \
+    X; Z; Y; A; \
     Z -> Y; \
+    A -> Y; \
     X <-> Z; '
 
 G = grapl_obj.readgrapl(dag_grapl)
@@ -75,69 +76,34 @@ denom, denom_expr, isident_denom = algs.idfixing(G, {'X'}, {'Z'})
 
 output = str(num) +  '/' + str(denom)
 
-output = expr.Expr(num=num_expr, den=denom_expr)
-# output.simplify()
-string_output = output.tostr()
-
-
-
-markov_string, markov_true = algs.localmarkov(G)
-print(markov_string, markov_true)
-
-# Function to redefine string.
-
-def swap_strings(X, Y, Z):
-    newdict = {'X': X, 'Y': Y, 'Z': Z}
-
-    output = list()
-    for key, value in newdict.items():
-        output.extend(key)
-
-    newstring = str(output[1]) + '⊥' + str(output[2]) + '| ' + str(output[0])
-    return newstring
-
-
-### Function for step 1
-
 def conditional_intervention_distribution(Y, X, Z, G):
 
     ## Step 1.
 
     ## Creating a new version of the graph where all nodes up from x and down from z are deleted.
-    G = G.delete_incoming('X')
-    G = G.delete_outgoing('Z')
+    G_original = cp.deepcopy(G)
+    G.delete_incoming(X)
+    G.delete_outgoing(Z)
 
     # testing if y is conditionally independent of Z locally.
     # Assuming there's only one Z.
-    #if len(Z) > 1:
-
-    if dsep.dsep(Y, Z, X, G) == 'd-separated':
-        #conditional_intervention_distribution(Y, Z, X, G)
-        pass
+    if len(Z) > 1:
+        for z in Z:
+            if dsep.dsep(Y, z, X, G) == 'd-separated':
+                # This needs to call the function again, but with the z we used addded to X and removed from Z.
+                X.add(z)
+                Z.remove(z)
+                conditional_intervention_distribution(Y, X, Z, G_original)
      # Step 2. If not true, using the ID function.
     else:
-        num, num_expr, isident_num = algs.idfixing(G, X, {Y, Z})
-        denom, denom_expr, isident_denom = algs.idfixing(G, X, {Z})
+        joint_y_z_set = Y.union(Z)
+        num, num_expr, isident_num = algs.idfixing(G_original, X, joint_y_z_set)
+        denom, denom_expr, isident_denom = algs.idfixing(G_original, X, Z)
 
     output = str(num) +  '/' + str(denom)
     return output
 
-    #
-    #
-    # for x in markov_string:
-    #     if swap_strings(X, Y, Z) in x:
-    #         print('Yes')
-    #     else:
-    #         print(swap_strings(X, Y, Z))
-    #         # condition_1 = True
+identifiable = conditional_intervention_distribution({'Y'}, {'X'}, {'Z'}, G)
 
-    # If this is ever true, return the recursion with another z
-
-    # return output
-
-G_edited = conditional_intervention_distribution('Y', 'X', 'Z', G)
-G_edited.display()
-G_edited.pa('X')
-G_edited.ch('Z')
 
 print('done')
